@@ -1,38 +1,94 @@
 // ==UserScript==
 // @name         GhostPixel Bot
 // @namespace    https://github.com/nymtuta
-// @version      0.0.1
+// @version      0.1.0
 // @description  A bot to place pixels from the ghost image on https://geopixels.net
 // @author       nymtuta
-// @match        https://geopixels.net/*
-// @updateURL    https://github.com/nymtuta/GeoPixelsBot/raw/refs/heads/main/ghostBot.js
-// @downloadURL  https://github.com/nymtuta/GeoPixelsBot/raw/refs/heads/main/ghostBot.js
+// @match        https://*.geopixels.net/*
+// @updateURL    https://github.com/nymtuta/GeoPixelsBot/raw/refs/heads/main/ghostBot.user.js
+// @downloadURL  https://github.com/nymtuta/GeoPixelsBot/raw/refs/heads/main/ghostBot.user.js
 // @homepage     https://github.com/nymtuta/GeoPixelsBot
 // @icon         https://raw.githubusercontent.com/nymtuta/GeoPixelsBot/refs/heads/main/img/icon.png
 // @license      GPL-3.0
 // @grant        unsafeWindow
 // ==/UserScript==
 
-(function () {
-	const placeTransparentGhostPixels = false;
+//#region Utils
+Number.prototype.iToH = function () {
+	return this.toString(16).padStart(2, "0");
+};
+String.prototype.hToI = function () {
+	return parseInt(this, 16);
+};
 
-	const cToHex = (c) => c.toString(16).padStart(2, "0");
+String.prototype.toFullHex = function () {
+	let h = this.toLowerCase();
+	if (h.length === 4 || h.length === 5) h = "#" + [...h.slice(1)].map((c) => c + c).join("");
+	if (h.length === 7) h += "ff";
+	return h;
+};
 
-	function HexToInt(hex) {
-		return hex.slice(7) === "00" ? -1 : parseInt(hex.slice(1, 7), 16);
+class Color {
+	constructor(arg = {}) {
+		if (typeof arg === "string") return this.constructorFromHex(arg);
+		this.r = arg.r;
+		this.g = arg.g;
+		this.b = arg.b;
+		this.a = arg.a == undefined || arg.a == null ? 255 : arg.a;
 	}
 
-	const ghostImagePixelToGridCoord = (pixel) => ({
-		x: ghostImageTopLeft.gridX + (pixel.i % ghostImage.width),
-		y: ghostImageTopLeft.gridY - Math.floor(pixel.i / ghostImage.width),
-	});
+	constructorFromHex(hex) {
+		hex = hex.toFullHex();
+		var r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+		if (!r) throw new Error("Invalid hex color: " + hex);
+		this.r = r[1].hToI();
+		this.g = r[2].hToI();
+		this.b = r[3].hToI();
+		this.a = r[4].hToI();
+	}
 
-	String.prototype.toFullHex = function () {
-		let h = this.toLowerCase();
-		if (h.length === 4 || h.length === 5) h = "#" + [...h.slice(1)].map((c) => c + c).join("");
-		if (h.length === 7) h += "ff";
-		return h;
-	};
+	rgbaString = () => `rgba(${this.r},${this.g},${this.b},${this.a})`;
+
+	hex = () => "#" + this.r.iToH() + this.g.iToH() + this.b.iToH() + this.a.iToH();
+
+	websiteId = () => (this.a == 0 ? -1 : (this.r << 16) + (this.g << 8) + this.b);
+
+	// compare the colors
+	valueOf = this.websiteId; //seems to be the convention
+	val = this.valueOf; // will use that because is short
+}
+
+const ghostPixelToGridCoord = (i) => ({
+	x: ghostImageTopLeft.gridX + (i % ghostImage.width),
+	y: ghostImageTopLeft.gridY - Math.floor(i / ghostImage.width),
+});
+
+function getAllCoordsBetween(a, b) {
+	const coords = [];
+	for (let x = Math.min(a.x, b.x); x <= Math.max(a.x, b.x); x++)
+		for (let y = Math.min(a.y, b.y); y <= Math.max(a.y, b.y); y++) coords.push({ x, y });
+	return coords;
+}
+
+const LOG_LEVELS = {
+	error: { label: "ERR", color: "red" },
+	info: { label: "INF", color: "lime" },
+	warn: { label: "WRN", color: "yellow" },
+	debug: { label: "DBG", color: "orange" },
+};
+
+function log(lvl, ...args) {
+	console.log(
+		`%c[ghostBot] %c[${lvl.label}]`,
+		"color: rebeccapurple;",
+		`color:${lvl.color};`,
+		...args
+	);
+}
+//#endregion
+
+(function () {
+	const placeTransparentGhostPixels = false;
 
 	function getGhostImageData() {
 		if (!ghostImage || !ghostImageOriginalData || !ghostImageTopLeft) return null;
@@ -45,14 +101,39 @@
 			const a = ghostImageOriginalData.data[i + 3];
 			ghostImageData.push({
 				i: i / 4,
-				r,
-				g,
-				b,
-				a,
-				hex: `#${cToHex(r)}${cToHex(g)}${cToHex(b)}${cToHex(a)}`,
+				gridCoord: ghostPixelToGridCoord(i / 4),
+				color: new Color({ r, g, b, a }),
 			});
 		}
 		return ghostImageData;
+	}
+
+	Array.prototype.orderGhostPixels = function () {
+		const freqMap = new Map();
+		this.forEach((pixel) => {
+			const val = pixel.color.val();
+			freqMap.set(val, (freqMap.get(val) || 0) + 1);
+		});
+		return this.sort((a, b) => {
+			const aFreq = freqMap.get(a.color.val());
+			const bFreq = freqMap.get(b.color.val());
+			return aFreq - bFreq;
+		});
+	};
+
+	function getPixelsToPlace() {
+		return getGhostImageData()
+			.filter((d) => {
+				return placeTransparentGhostPixels || d.color.a > 0;
+			})
+			.orderGhostPixels()
+			.filter((d) => {
+				const placedPixel = placedPixels.get(`${d.gridCoord.x},${d.gridCoord.y}`);
+				return (
+					(!placedPixel || new Color(placedPixel.color).val() !== d.color.val()) &&
+					Colors.findIndex((c) => new Color(c).val() === d.color.val()) !== -1
+				);
+			});
 	}
 
 	async function sendPixels(pixels) {
@@ -66,26 +147,16 @@
 				Pixels: pixels.map((c) => ({ ...c, UserId: userID })),
 			}),
 		});
-		console.log(r.ok ? "Placed pixels!" : "Failed to place pixels. : " + (await r.text()));
-	}
-
-	function getPixelsToPlace() {
-		return getGhostImageData().filter((d) => {
-			const gridCoord = ghostImagePixelToGridCoord(d);
-			const placedPixel = placedPixels.get(`${gridCoord.x},${gridCoord.y}`);
-			return (
-				(placeTransparentGhostPixels || d.a > 0) &&
-				(!placedPixel || placedPixel.color.toFullHex() !== d.hex) &&
-				Colors.findIndex((c) => c.toFullHex() === d.hex) !== -1
-			);
-		});
+		if (!r.ok) log(LOG_LEVELS.error, "Failed to place pixels. : " + (await r.text()));
+		else log(LOG_LEVELS.info, `Placed ${pixels.length} pixels!`);
 	}
 
 	let stopWhileLoop = false;
+	let promiseResolve;
 
 	unsafeWindow.startGhostBot = async function () {
 		if (!ghostImage || !ghostImageOriginalData || !ghostImageTopLeft) {
-			console.log("Ghost image not loaded.");
+			log(LOG_LEVELS.error, "Ghost image not loaded.");
 			return;
 		}
 		stopWhileLoop = false;
@@ -94,29 +165,37 @@
 			await synchronize("full");
 			const pixelsToPlace = getPixelsToPlace();
 			if (pixelsToPlace.length === 0) {
-				console.log("All pixels are correctly placed.");
+				log(LOG_LEVELS.info, "All pixels are correctly placed.");
 				break;
 			}
 			const pixelsThisRequest = pixelsToPlace.slice(0, currentEnergy);
-			console.log(`Placing ${pixelsThisRequest.length}/${pixelsToPlace.length} pixels...`);
+			log(LOG_LEVELS.info, `Placing ${pixelsThisRequest.length}/${pixelsToPlace.length} pixels...`);
 
 			sendPixels(
 				pixelsThisRequest.map((d) => {
-					const gridCoord = ghostImagePixelToGridCoord(d);
 					return {
-						GridX: gridCoord.x,
-						GridY: gridCoord.y,
-						Color: HexToInt(d.hex),
+						GridX: d.gridCoord.x,
+						GridY: d.gridCoord.y,
+						Color: d.color.websiteId(),
 					};
 				})
 			);
 
 			/* isPageVisible = !document.hidden; */
-			await new Promise((resolve) => setTimeout(resolve, (maxEnergy - 2) * energyRate * 1000));
+			await new Promise((resolve) => {
+				promiseResolve = resolve;
+				setTimeout(resolve, (maxEnergy - 2) * energyRate * 1000);
+			});
 		}
 	};
 
 	unsafeWindow.stopGhostBot = function () {
 		stopWhileLoop = true;
+		promiseResolve?.();
 	};
+
+	log(
+		LOG_LEVELS.info,
+		"GhostPixel Bot loaded. Use startGhostBot() to start and stopGhostBot() to stop."
+	);
 })();
