@@ -14,11 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - auto buy upgrades
 - farm mode
 
+## [Unreleased] (done)
+## Changed
+- don't "fetch" the whole ghostimage each time we place pixels
+
 ## [0.1.0] - 2025-10-06
 ## Added
 - paint color by color (least frequent first)
 - log function
-
 ## Changed
 - make `stopGhostBot()` actually stop the bot lol
 - refactor Color Utils to use a class

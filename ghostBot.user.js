@@ -58,9 +58,9 @@ class Color {
 	val = this.valueOf; // will use that because is short
 }
 
-const ghostPixelToGridCoord = (i) => ({
-	x: ghostImageTopLeft.gridX + (i % ghostImage.width),
-	y: ghostImageTopLeft.gridY - Math.floor(i / ghostImage.width),
+const pixelToGridCoord = (i, topLeft, size) => ({
+	x: topLeft.x + (i % size.width),
+	y: topLeft.y - Math.floor(i / size.width),
 });
 
 function getAllCoordsBetween(a, b) {
@@ -85,10 +85,24 @@ function log(lvl, ...args) {
 		...args
 	);
 }
+
+class ImageData {
+	constructor(imageData, topLeft, size) {
+		this.data = imageData.map((d) => {
+			const { i, r, g, b, a } = d;
+			return {
+				i,
+				gridCoord: pixelToGridCoord(i, topLeft, size),
+				color: new Color({ r, g, b, a }),
+			};
+		});
+	}
+}
 //#endregion
 
 (function () {
 	const placeTransparentGhostPixels = false;
+	let ghostPixelData;
 
 	function getGhostImageData() {
 		if (!ghostImage || !ghostImageOriginalData || !ghostImageTopLeft) return null;
@@ -99,13 +113,14 @@ function log(lvl, ...args) {
 			const g = ghostImageOriginalData.data[i + 1];
 			const b = ghostImageOriginalData.data[i + 2];
 			const a = ghostImageOriginalData.data[i + 3];
-			ghostImageData.push({
-				i: i / 4,
-				gridCoord: ghostPixelToGridCoord(i / 4),
-				color: new Color({ r, g, b, a }),
-			});
+			ghostImageData.push({ i: i / 4, r, g, b, a });
 		}
-		return ghostImageData;
+
+		return new ImageData(
+			ghostImageData,
+			{ x: ghostImageTopLeft.gridX, y: ghostImageTopLeft.gridY },
+			ghostImage
+		);
 	}
 
 	Array.prototype.orderGhostPixels = function () {
@@ -121,19 +136,21 @@ function log(lvl, ...args) {
 		});
 	};
 
+	function setGhostPixelData() {
+		ghostPixelData = getGhostImageData().filter((d) => {
+			return placeTransparentGhostPixels || d.color.a > 0;
+		});
+	}
+
 	function getPixelsToPlace() {
-		return getGhostImageData()
-			.filter((d) => {
-				return placeTransparentGhostPixels || d.color.a > 0;
-			})
-			.orderGhostPixels()
-			.filter((d) => {
-				const placedPixel = placedPixels.get(`${d.gridCoord.x},${d.gridCoord.y}`);
-				return (
-					(!placedPixel || new Color(placedPixel.color).val() !== d.color.val()) &&
-					Colors.findIndex((c) => new Color(c).val() === d.color.val()) !== -1
-				);
-			});
+		if (!ghostPixelData) setGhostPixelData();
+		return ghostPixelData.data.orderGhostPixels().filter((d) => {
+			const placedPixel = placedPixels.get(`${d.gridCoord.x},${d.gridCoord.y}`);
+			return (
+				(!placedPixel || new Color(placedPixel.color).val() !== d.color.val()) &&
+				Colors.findIndex((c) => new Color(c).val() === d.color.val()) !== -1
+			);
+		});
 	}
 
 	async function sendPixels(pixels) {
