@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - auto buy upgrades
 - farm mode
 
+## [0.2.1] - 2025-10-22
+## Changed
+- stop the bot if logged out and relog fails
+- don't wait for next full recharge to stop the bot when all pixels are placed
+
 ## [0.2.0] - 2025-10-22
 ## Changed
 - don't "fetch" the whole ghostimage each time we place pixels

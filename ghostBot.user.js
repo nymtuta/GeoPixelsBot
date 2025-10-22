@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GhostPixel Bot
 // @namespace    https://github.com/nymtuta
-// @version      0.2.0
+// @version      0.2.1
 // @description  A bot to place pixels from the ghost image on https://geopixels.net
 // @author       nymtuta
 // @match        https://*.geopixels.net/*
@@ -203,7 +203,7 @@ class ImageData {
 		});
 		if (!r.ok) {
 			log(LOG_LEVELS.error, "Failed to place pixels. : " + (await r.text()));
-			if (r.status == 401 && (await tryRelog())) sendPixels(pixels);
+			if (r.status == 401 && (await tryRelog())) await sendPixels(pixels);
 		} else log(LOG_LEVELS.info, `Placed ${pixels.length} pixels!`);
 	}
 
@@ -227,7 +227,7 @@ class ImageData {
 			const pixelsThisRequest = pixelsToPlace.slice(0, currentEnergy);
 			log(LOG_LEVELS.info, `Placing ${pixelsThisRequest.length}/${pixelsToPlace.length} pixels...`);
 
-			sendPixels(
+			await sendPixels(
 				pixelsThisRequest.map((d) => {
 					return {
 						GridX: d.gridCoord.x,
@@ -236,6 +236,15 @@ class ImageData {
 					};
 				})
 			);
+
+			if (!tokenUser) {
+				log(LOG_LEVELS.error, "logged out => stopping the bot");
+				break;
+			}
+			if (pixelsToPlace.length === pixelsThisRequest.length) {
+				log(LOG_LEVELS.info, "All pixels are correctly placed.");
+				break;
+			}
 
 			/* isPageVisible = !document.hidden; */
 			await new Promise((resolve) => {
