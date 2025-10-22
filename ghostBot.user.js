@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GhostPixel Bot
 // @namespace    https://github.com/nymtuta
-// @version      0.1.0
+// @version      0.2.0
 // @description  A bot to place pixels from the ghost image on https://geopixels.net
 // @author       nymtuta
 // @match        https://*.geopixels.net/*
@@ -101,8 +101,45 @@ class ImageData {
 //#endregion
 
 (function () {
+	const usw = unsafeWindow;
 	const placeTransparentGhostPixels = false;
 	let ghostPixelData;
+	const GOOGLE_CLIENT_ID = document.getElementById("g_id_onload").getAttribute("data-client_id");
+
+	async function tryRelog() {
+		tokenUser = "";
+
+		log(LOG_LEVELS.info, "attempting AutoLogin");
+		await usw.tryAutoLogin();
+
+		if (!tokenUser.length) {
+			log(LOG_LEVELS.info, "AutoLogin failed, attempting relog with google");
+			await new Promise((resolve) => {
+				google.accounts.id.initialize({
+					client_id: GOOGLE_CLIENT_ID,
+					callback: async (e) => {
+						const r = await fetch("/auth/google", {
+							method: "POST",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify({ token: e.credential }),
+						});
+						if (!r.ok) return log(LOG_LEVELS.info, "Google authentication failed");
+						const data = await r.json();
+						await logIn(data);
+
+						resolve();
+					},
+					auto_select: true,
+					context: "signin",
+				});
+
+				google.accounts.id.prompt();
+			});
+		}
+
+		log(LOG_LEVELS.info, `Relog ${tokenUser.length ? "successful" : "failed"}`);
+		return !!tokenUser.length;
+	}
 
 	function getGhostImageData() {
 		if (!ghostImage || !ghostImageOriginalData || !ghostImageTopLeft) return null;
@@ -137,14 +174,14 @@ class ImageData {
 	};
 
 	function setGhostPixelData() {
-		ghostPixelData = getGhostImageData().filter((d) => {
+		ghostPixelData = getGhostImageData().data.filter((d) => {
 			return placeTransparentGhostPixels || d.color.a > 0;
 		});
 	}
 
 	function getPixelsToPlace() {
 		if (!ghostPixelData) setGhostPixelData();
-		return ghostPixelData.data.orderGhostPixels().filter((d) => {
+		return ghostPixelData.orderGhostPixels().filter((d) => {
 			const placedPixel = placedPixels.get(`${d.gridCoord.x},${d.gridCoord.y}`);
 			return (
 				(!placedPixel || new Color(placedPixel.color).val() !== d.color.val()) &&
@@ -164,14 +201,16 @@ class ImageData {
 				Pixels: pixels.map((c) => ({ ...c, UserId: userID })),
 			}),
 		});
-		if (!r.ok) log(LOG_LEVELS.error, "Failed to place pixels. : " + (await r.text()));
-		else log(LOG_LEVELS.info, `Placed ${pixels.length} pixels!`);
+		if (!r.ok) {
+			log(LOG_LEVELS.error, "Failed to place pixels. : " + (await r.text()));
+			if (r.status == 401 && (await tryRelog())) sendPixels(pixels);
+		} else log(LOG_LEVELS.info, `Placed ${pixels.length} pixels!`);
 	}
 
 	let stopWhileLoop = false;
 	let promiseResolve;
 
-	unsafeWindow.startGhostBot = async function () {
+	usw.startGhostBot = async function () {
 		if (!ghostImage || !ghostImageOriginalData || !ghostImageTopLeft) {
 			log(LOG_LEVELS.error, "Ghost image not loaded.");
 			return;
@@ -206,7 +245,7 @@ class ImageData {
 		}
 	};
 
-	unsafeWindow.stopGhostBot = function () {
+	usw.stopGhostBot = function () {
 		stopWhileLoop = true;
 		promiseResolve?.();
 	};
