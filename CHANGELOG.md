@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - auto buy upgrades
 - farm mode
 
+## [Unreleased] (done)
+### Added
+- error handling
+
 ## [0.3.1] - 2025-10-23
 ### Added
 - Ability to not place specified colors thourgh `ghostBot.ignoreColors()`

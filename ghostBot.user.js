@@ -75,7 +75,7 @@ const LOG_LEVELS = {
 	error: { label: "ERR", color: "red" },
 	info: { label: "INF", color: "lime" },
 	warn: { label: "WRN", color: "yellow" },
-	debug: { label: "DBG", color: "orange" },
+	debug: { label: "DBG", color: "cyan" },
 };
 
 function log(lvl, ...args) {
@@ -118,6 +118,16 @@ FREE_COLORS = [
 	"#000000",
 	"#00000000",
 ].map((c) => new Color(c));
+
+function withErrorHandling(asyncFn) {
+	return async function (...args) {
+		try {
+			return await asyncFn(...args);
+		} catch (e) {
+			log(LOG_LEVELS.error, e.message);
+		}
+	};
+}
 //#endregion
 
 (function () {
@@ -160,6 +170,7 @@ FREE_COLORS = [
 		log(LOG_LEVELS.info, `Relog ${tokenUser.length ? "successful" : "failed"}`);
 		return !!tokenUser.length;
 	}
+	tryRelog = withErrorHandling(tryRelog);
 
 	function getGhostImageData() {
 		if (!ghostImage || !ghostImageOriginalData || !ghostImageTopLeft) return null;
@@ -225,17 +236,18 @@ FREE_COLORS = [
 			}),
 		});
 		if (!r.ok) {
-			log(LOG_LEVELS.error, "Failed to place pixels. : " + (await r.text()));
+			log(LOG_LEVELS.warn, "Failed to place pixels. : " + (await r.text()));
 			if (r.status == 401 && (await tryRelog())) await sendPixels(pixels);
 		} else log(LOG_LEVELS.info, `Placed ${pixels.length} pixels!`);
 	}
+	sendPixels = withErrorHandling(sendPixels);
 
 	let stopWhileLoop = false;
 	let promiseResolve;
 
-	startGhostBot = async function () {
+	async function startGhostBot() {
 		if (!ghostImage || !ghostImageOriginalData || !ghostImageTopLeft) {
-			log(LOG_LEVELS.error, "Ghost image not loaded.");
+			log(LOG_LEVELS.warn, "Ghost image not loaded.");
 			return;
 		}
 		stopWhileLoop = false;
@@ -261,7 +273,7 @@ FREE_COLORS = [
 			);
 
 			if (!tokenUser) {
-				log(LOG_LEVELS.error, "logged out => stopping the bot");
+				log(LOG_LEVELS.warn, "logged out => stopping the bot");
 				break;
 			}
 			if (pixelsToPlace.length === pixelsThisRequest.length) {
@@ -280,20 +292,17 @@ FREE_COLORS = [
 				);
 			});
 		}
-	};
+	}
+	startGhostBot = withErrorHandling(startGhostBot);
 
 	usw.ghostBot = {
 		placeTransparentGhostPixels: false,
 		placeFreeColors: true,
-		ignoreColors: (input, sep = ",") => {
-			try {
-				if (!Array.isArray(input)) input = input.split(sep);
-				ignoredColors = input.map((c) => new Color(c).val());
-				log(LOG_LEVELS.info, "New ignored colors :", ignoredColors);
-			} catch (e) {
-				log(LOG_LEVELS.error, e.message);
-			}
-		},
+		ignoreColors: withErrorHandling((input, sep = ",") => {
+			if (!Array.isArray(input)) input = input.split(sep);
+			ignoredColors = input.map((c) => new Color(c).val());
+			log(LOG_LEVELS.info, "New ignored colors :", ignoredColors);
+		}),
 		start: () => startGhostBot(),
 		stop: () => {
 			stopWhileLoop = true;
