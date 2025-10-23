@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - auto buy upgrades
 - farm mode
 
-## [Unreleased] (done)
+## [0.3.2] - 2025-10-23
 ### Added
 - error handling
 ### Changed

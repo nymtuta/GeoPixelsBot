@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GhostPixel Bot
 // @namespace    https://github.com/nymtuta
-// @version      0.3.1
+// @version      0.3.2
 // @description  A bot to place pixels from the ghost image on https://geopixels.net
 // @author       nymtuta
 // @match        https://*.geopixels.net/*
