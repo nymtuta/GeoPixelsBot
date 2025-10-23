@@ -6,8 +6,14 @@ A bot for automatic ghost placement on the website https://geopixels.net
 2. [click here](https://github.com/nymtuta/GeoPixelsBot/raw/refs/heads/main/ghostBot.user.js)
 
 ## Usage
-1. Use `startGhostBot()` to start the bot and `stopGhostBot()` to stop it
-2. leave your view in the middle of your ghost image (this is important or it will place pixels at the same place multiple times) (will be fixed later)
+- leave your view in the middle of your ghost image (this is important or it will place pixels at the same place multiple times) (will be fixed later)
+- Commands: 
+  - `ghostBot.start()` : start the bot
+  - `ghostBot.stop()` : stop the bot
+  - `ghostBot.reload()` : reloads ghost data (needed after any configuration change or after buying a new color)
+- Settings *(has to be set after each page reload)*: 
+  - `ghostBot.placeTransparentGhostPixels` *`[boolean]`* : place transparent pixels *(default: false)*
+  - `ghostBot.placeFreeColors` *`[boolean]`* : place free colors *(default: true)*
 
 ## Upcoming changes
 See [CHANGELOG.md#unreleased-todo](CHANGELOG.md#unreleased-todo)

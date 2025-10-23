@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GhostPixel Bot
 // @namespace    https://github.com/nymtuta
-// @version      0.2.1
+// @version      0.3.0
 // @description  A bot to place pixels from the ghost image on https://geopixels.net
 // @author       nymtuta
 // @match        https://*.geopixels.net/*
@@ -98,11 +98,29 @@ class ImageData {
 		});
 	}
 }
+
+FREE_COLORS = [
+	"#FFFFFF",
+	"#FFCA3A",
+	"#FF595E",
+	"#F3BBC2",
+	"#BD637D",
+	"#6A4C93",
+	"#A8D0DC",
+	"#1A535C",
+	"#1982C4",
+	"#8AC926",
+	"#6B4226",
+	"#CFD078",
+	"#8B1D24",
+	"#C49A6C",
+	"#000000",
+	"#00000000",
+].map((c) => new Color(c));
 //#endregion
 
 (function () {
 	const usw = unsafeWindow;
-	const placeTransparentGhostPixels = false;
 	let ghostPixelData;
 	const GOOGLE_CLIENT_ID = document.getElementById("g_id_onload").getAttribute("data-client_id");
 
@@ -175,7 +193,12 @@ class ImageData {
 
 	function setGhostPixelData() {
 		ghostPixelData = getGhostImageData().data.filter((d) => {
-			return placeTransparentGhostPixels || d.color.a > 0;
+			return (
+				(usw.ghostBot.placeTransparentGhostPixels || d.color.a > 0) &&
+				(usw.ghostBot.placeFreeColors ||
+					!FREE_COLORS.map((c) => c.val()).includes(d.color.val())) &&
+				Colors.map((c) => new Color(c).val()).includes(d.color.val())
+			);
 		});
 	}
 
@@ -183,10 +206,7 @@ class ImageData {
 		if (!ghostPixelData) setGhostPixelData();
 		return ghostPixelData.orderGhostPixels().filter((d) => {
 			const placedPixel = placedPixels.get(`${d.gridCoord.x},${d.gridCoord.y}`);
-			return (
-				(!placedPixel || new Color(placedPixel.color).val() !== d.color.val()) &&
-				Colors.findIndex((c) => new Color(c).val() === d.color.val()) !== -1
-			);
+			return !placedPixel || new Color(placedPixel.color).val() !== d.color.val();
 		});
 	}
 
@@ -210,7 +230,7 @@ class ImageData {
 	let stopWhileLoop = false;
 	let promiseResolve;
 
-	usw.startGhostBot = async function () {
+	startGhostBot = async function () {
 		if (!ghostImage || !ghostImageOriginalData || !ghostImageTopLeft) {
 			log(LOG_LEVELS.error, "Ghost image not loaded.");
 			return;
@@ -254,13 +274,20 @@ class ImageData {
 		}
 	};
 
-	usw.stopGhostBot = function () {
-		stopWhileLoop = true;
-		promiseResolve?.();
+	usw.ghostBot = {
+		placeTransparentGhostPixels: false,
+		placeFreeColors: true,
+		start: () => startGhostBot(),
+		stop: () => {
+			stopWhileLoop = true;
+			promiseResolve?.();
+			log(LOG_LEVELS.info, "Ghost bot stopped");
+		},
+		reload: () => setGhostPixelData(),
 	};
 
 	log(
 		LOG_LEVELS.info,
-		"GhostPixel Bot loaded. Use startGhostBot() to start and stopGhostBot() to stop."
+		"GhostPixel Bot loaded. Use ghostBot.start() to start and ghostBot.stop() to stop."
 	);
 })();

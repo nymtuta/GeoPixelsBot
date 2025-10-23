@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - auto buy upgrades
 - farm mode
 
+## [0.3.0] - 2025-10-23
+## Changed
+- the settings are now accessible
+- the functions and settings are now in an object named `ghostBot`
+## Added
+- Ability to not place free colors (`ghostBot.placeFreeColors`)
+- `ghostBot.reload()` : reloads ghost data
+
 ## [0.2.1] - 2025-10-22
 ## Changed
 - stop the bot if logged out and relog fails
