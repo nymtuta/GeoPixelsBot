@@ -15,35 +15,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - farm mode
 
 ## [0.3.1] - 2025-10-23
-## Added
+### Added
 - Ability to not place specified colors thourgh `ghostBot.ignoreColors()`
-## Changed
+### Changed
 - if there are less pixels left to place than the mex energy, don't wait until energy is filled but until there's just enough for next batch
 
 ## [0.3.0] - 2025-10-23
 ## Changed
 - the settings are now accessible
 - the functions and settings are now in an object named `ghostBot`
-## Added
+### Added
 - Ability to not place free colors (`ghostBot.placeFreeColors`)
 - `ghostBot.reload()` : reloads ghost data
 
 ## [0.2.1] - 2025-10-22
-## Changed
+### Changed
 - stop the bot if logged out and relog fails
 - don't wait for next full recharge to stop the bot when all pixels are placed
 
 ## [0.2.0] - 2025-10-22
-## Changed
+### Changed
 - don't "fetch" the whole ghostimage each time we place pixels
-## Added
+### Added
 - Automatic relogging
 
 ## [0.1.0] - 2025-10-06
-## Added
+### Added
 - paint color by color (least frequent first)
 - log function
-## Changed
+### Changed
 - make `stopGhostBot()` actually stop the bot lol
 - refactor Color Utils to use a class
 
