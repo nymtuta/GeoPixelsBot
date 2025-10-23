@@ -11,6 +11,7 @@ A bot for automatic ghost placement on the website https://geopixels.net
   - `ghostBot.start()` : start the bot
   - `ghostBot.stop()` : stop the bot
   - `ghostBot.reload()` : reloads ghost data (needed after any configuration change or after buying a new color)
+  - `ghostBot.ignoreColors()` : add colors to the ignored list (input can be an array or a string with colors separated by `,` or by the second argument specified)
 - Settings *(has to be set after each page reload)*: 
   - `ghostBot.placeTransparentGhostPixels` *`[boolean]`* : place transparent pixels *(default: false)*
   - `ghostBot.placeFreeColors` *`[boolean]`* : place free colors *(default: true)*

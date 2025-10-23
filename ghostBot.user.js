@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GhostPixel Bot
 // @namespace    https://github.com/nymtuta
-// @version      0.3.0
+// @version      0.3.1
 // @description  A bot to place pixels from the ghost image on https://geopixels.net
 // @author       nymtuta
 // @match        https://*.geopixels.net/*
@@ -23,6 +23,7 @@ String.prototype.hToI = function () {
 
 String.prototype.toFullHex = function () {
 	let h = this.toLowerCase();
+	if (!h.startsWith("#")) h = `#${h}`;
 	if (h.length === 4 || h.length === 5) h = "#" + [...h.slice(1)].map((c) => c + c).join("");
 	if (h.length === 7) h += "ff";
 	return h;
@@ -122,6 +123,7 @@ FREE_COLORS = [
 (function () {
 	const usw = unsafeWindow;
 	let ghostPixelData;
+	let ignoredColors;
 	const GOOGLE_CLIENT_ID = document.getElementById("g_id_onload").getAttribute("data-client_id");
 
 	async function tryRelog() {
@@ -197,7 +199,8 @@ FREE_COLORS = [
 				(usw.ghostBot.placeTransparentGhostPixels || d.color.a > 0) &&
 				(usw.ghostBot.placeFreeColors ||
 					!FREE_COLORS.map((c) => c.val()).includes(d.color.val())) &&
-				Colors.map((c) => new Color(c).val()).includes(d.color.val())
+				Colors.map((c) => new Color(c).val()).includes(d.color.val()) &&
+				!ignoredColors.includes(d.color.val())
 			);
 		});
 	}
@@ -269,7 +272,12 @@ FREE_COLORS = [
 			/* isPageVisible = !document.hidden; */
 			await new Promise((resolve) => {
 				promiseResolve = resolve;
-				setTimeout(resolve, (maxEnergy - 2) * energyRate * 1000);
+				setTimeout(
+					resolve,
+					(maxEnergy > pixelsToPlace - maxEnergy ? pixelsToPlace - maxEnergy : maxEnergy - 2) *
+						energyRate *
+						1000
+				);
 			});
 		}
 	};
@@ -277,6 +285,15 @@ FREE_COLORS = [
 	usw.ghostBot = {
 		placeTransparentGhostPixels: false,
 		placeFreeColors: true,
+		ignoreColors: (input, sep = ",") => {
+			try {
+				if (!Array.isArray(input)) input = input.split(sep);
+				ignoredColors = input.map((c) => new Color(c).val());
+				log(LOG_LEVELS.info, "New ignored colors :", ignoredColors);
+			} catch (e) {
+				log(LOG_LEVELS.error, e.message);
+			}
+		},
 		start: () => startGhostBot(),
 		stop: () => {
 			stopWhileLoop = true;

@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - auto buy upgrades
 - farm mode
 
+## [0.3.1] - 2025-10-23
+## Added
+- Ability to not place specified colors thourgh `ghostBot.ignoreColors()`
+## Changed
+- if there are less pixels left to place than the mex energy, don't wait until energy is filled but until there's just enough for next batch
+
 ## [0.3.0] - 2025-10-23
 ## Changed
 - the settings are now accessible
