@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] (done)
 ### Added
 - error handling
+### Changed
+- `ignoredColors` is now a `Set`
+### Fixed
+- fix the bot not starting when `ignoredColors` was undefined
 
 ## [0.3.1] - 2025-10-23
 ### Added

@@ -133,7 +133,7 @@ function withErrorHandling(asyncFn) {
 (function () {
 	const usw = unsafeWindow;
 	let ghostPixelData;
-	let ignoredColors;
+	let ignoredColors = new Set();
 	const GOOGLE_CLIENT_ID = document.getElementById("g_id_onload").getAttribute("data-client_id");
 
 	async function tryRelog() {
@@ -211,7 +211,7 @@ function withErrorHandling(asyncFn) {
 				(usw.ghostBot.placeFreeColors ||
 					!FREE_COLORS.map((c) => c.val()).includes(d.color.val())) &&
 				Colors.map((c) => new Color(c).val()).includes(d.color.val()) &&
-				!ignoredColors.includes(d.color.val())
+				!ignoredColors.has(d.color.val())
 			);
 		});
 	}
@@ -300,7 +300,7 @@ function withErrorHandling(asyncFn) {
 		placeFreeColors: true,
 		ignoreColors: withErrorHandling((input, sep = ",") => {
 			if (!Array.isArray(input)) input = input.split(sep);
-			ignoredColors = input.map((c) => new Color(c).val());
+			ignoredColors = new Set(input.map((c) => new Color(c).val()));
 			log(LOG_LEVELS.info, "New ignored colors :", ignoredColors);
 		}),
 		start: () => startGhostBot(),
