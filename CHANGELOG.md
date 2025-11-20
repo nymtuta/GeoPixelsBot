@@ -7,12 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] (todo)
 - UI
-- use own calls to the backend to not relly on global variables that may change
 - multi account support
 - multiple pixel ordering strategies
 - auto buy locked colors
 - auto buy upgrades
 - farm mode
+
+## [0.4.0] - 2025-11-21
+### Changed
+- Removed `valueOf()` and `val()`, renamed `websiteId()` to now only use more concise `id()` in the `Color` class
+- Make own calls to the backend to fetch placed pixels instead of relying on global variables that have changed
+### Added
+- Server tile fetching system with support for delta and full tile updates
+- Helper functions: `canvasToImageData()`, `webpToCanvasData()`, `loadImageAsync()`
+### Fixed
+- Fixed delay calculation in main while loop
 
 ## [0.3.2] - 2025-10-23
 ### Added

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GhostPixel Bot
 // @namespace    https://github.com/nymtuta
-// @version      0.3.2
+// @version      0.4.0
 // @description  A bot to place pixels from the ghost image on https://geopixels.net
 // @author       nymtuta
 // @match        https://*.geopixels.net/*
@@ -32,10 +32,11 @@ String.prototype.toFullHex = function () {
 class Color {
 	constructor(arg = {}) {
 		if (typeof arg === "string") return this.constructorFromHex(arg);
+		if (typeof arg === "number") return this.constructorFromId(arg);
 		this.r = arg.r;
 		this.g = arg.g;
 		this.b = arg.b;
-		this.a = arg.a == undefined || arg.a == null ? 255 : arg.a;
+		this.a = arg.a === undefined || arg.a === null ? 255 : arg.a;
 	}
 
 	constructorFromHex(hex) {
@@ -48,26 +49,40 @@ class Color {
 		this.a = r[4].hToI();
 	}
 
+	constructorFromId(id) {
+		if (id === -1) {
+			this.r = this.g = this.b = this.a = 0;
+			return;
+		}
+		this.r = (id >> 16) & 0xff;
+		this.g = (id >> 8) & 0xff;
+		this.b = id & 0xff;
+		this.a = 255;
+	}
+
 	rgbaString = () => `rgba(${this.r},${this.g},${this.b},${this.a})`;
 
-	hex = () => "#" + this.r.iToH() + this.g.iToH() + this.b.iToH() + this.a.iToH();
+	hex = () => "#" + [this.r, this.g, this.b, this.a].map((x) => x.iToH()).join("");
 
-	websiteId = () => (this.a == 0 ? -1 : (this.r << 16) + (this.g << 8) + this.b);
-
-	// compare the colors
-	valueOf = this.websiteId; //seems to be the convention
-	val = this.valueOf; // will use that because is short
+	id = () => (this.a === 0 ? -1 : (this.r << 16) + (this.g << 8) + this.b);
 }
 
-const pixelToGridCoord = (i, topLeft, size) => ({
-	x: topLeft.x + (i % size.width),
-	y: topLeft.y - Math.floor(i / size.width),
+const pixelToGridCoord = (i, topLeft, width) => ({
+	x: topLeft.x + (i % width),
+	y: topLeft.y - Math.floor(i / width),
 });
 
-function getAllCoordsBetween(a, b) {
+function coordToTileCoord({ x, y }) {
+	return {
+		x: Math.floor(x / SYNC_TILE_SIZE) * SYNC_TILE_SIZE,
+		y: Math.floor(y / SYNC_TILE_SIZE) * SYNC_TILE_SIZE,
+	};
+}
+
+function getAllCoordsBetween(a, b, size = 1) {
 	const coords = [];
-	for (let x = Math.min(a.x, b.x); x <= Math.max(a.x, b.x); x++)
-		for (let y = Math.min(a.y, b.y); y <= Math.max(a.y, b.y); y++) coords.push({ x, y });
+	for (let x = Math.min(a.x, b.x); x <= Math.max(a.x, b.x); x += size)
+		for (let y = Math.min(a.y, b.y); y <= Math.max(a.y, b.y); y += size) coords.push({ x, y });
 	return coords;
 }
 
@@ -87,20 +102,45 @@ function log(lvl, ...args) {
 	);
 }
 
-class ImageData {
-	constructor(imageData, topLeft, size) {
-		this.data = imageData.map((d) => {
-			const { i, r, g, b, a } = d;
-			return {
-				i,
-				gridCoord: pixelToGridCoord(i, topLeft, size),
-				color: new Color({ r, g, b, a }),
-			};
+function canvasToImageData(canvasData, x, y, existingMap = new Map()) {
+	for (let i = 0; i < canvasData.data.length; i += 4) {
+		const gridCoord = pixelToGridCoord(i / 4, { x, y }, canvasData.width);
+		const color = new Color({
+			r: canvasData.data[i],
+			g: canvasData.data[i + 1],
+			b: canvasData.data[i + 2],
+			a: canvasData.data[i + 3],
 		});
+		existingMap.set(`${gridCoord.x},${gridCoord.y}`, { gridCoord, color });
 	}
+	return existingMap;
 }
 
-FREE_COLORS = [
+function loadImageAsync(src) {
+	return new Promise((resolve, reject) => {
+		const img = new Image();
+		img.onload = () => resolve(img);
+		img.onerror = reject;
+		img.src = src;
+	});
+}
+
+async function webpToCanvasData(webp, width, height) {
+	const img = await loadImageAsync(`data:image/webp;base64,${webp}`);
+	const canvas = document.createElement("canvas");
+	canvas.width = width;
+	canvas.height = height;
+	const ctx = canvas.getContext("2d");
+	ctx.translate(0, height);
+	ctx.scale(1, -1);
+	ctx.drawImage(img, 0, 0);
+	const canvasData = ctx.getImageData(0, 0, width, height);
+	canvas.remove();
+	return canvasData;
+}
+webpToCanvasData = withErrorHandling(webpToCanvasData);
+
+const FREE_COLORS = [
 	"#FFFFFF",
 	"#FFCA3A",
 	"#FF595E",
@@ -128,13 +168,17 @@ function withErrorHandling(asyncFn) {
 		}
 	};
 }
+
+const SYNC_TILE_SIZE = 1000;
 //#endregion
 
 (function () {
 	const usw = unsafeWindow;
-	let ghostPixelData;
+	let ghostPixelData, ghostData;
+	let placedPixelData = new Map();
 	let ignoredColors = new Set();
-	const GOOGLE_CLIENT_ID = document.getElementById("g_id_onload").getAttribute("data-client_id");
+	let lastServerTimestamp = 0;
+	const GOOGLE_CLIENT_ID = document.getElementById("g_id_onload")?.getAttribute("data-client_id");
 
 	async function tryRelog() {
 		tokenUser = "";
@@ -142,7 +186,7 @@ function withErrorHandling(asyncFn) {
 		log(LOG_LEVELS.info, "attempting AutoLogin");
 		await usw.tryAutoLogin();
 
-		if (!tokenUser.length) {
+		if (!tokenUser.length && GOOGLE_CLIENT_ID) {
 			log(LOG_LEVELS.info, "AutoLogin failed, attempting relog with google");
 			await new Promise((resolve) => {
 				google.accounts.id.initialize({
@@ -173,56 +217,101 @@ function withErrorHandling(asyncFn) {
 	tryRelog = withErrorHandling(tryRelog);
 
 	function getGhostImageData() {
-		if (!ghostImage || !ghostImageOriginalData || !ghostImageTopLeft) return null;
-
-		const ghostImageData = [];
-		for (let i = 0; i < ghostImageOriginalData.data.length; i += 4) {
-			const r = ghostImageOriginalData.data[i];
-			const g = ghostImageOriginalData.data[i + 1];
-			const b = ghostImageOriginalData.data[i + 2];
-			const a = ghostImageOriginalData.data[i + 3];
-			ghostImageData.push({ i: i / 4, r, g, b, a });
-		}
-
-		return new ImageData(
-			ghostImageData,
-			{ x: ghostImageTopLeft.gridX, y: ghostImageTopLeft.gridY },
-			ghostImage
+		if (!ghostImageOriginalData || !ghostImageTopLeft) return null;
+		return canvasToImageData(
+			ghostImageOriginalData,
+			ghostImageTopLeft.gridX,
+			ghostImageTopLeft.gridY
 		);
 	}
 
-	Array.prototype.orderGhostPixels = function () {
-		const freqMap = new Map();
-		this.forEach((pixel) => {
-			const val = pixel.color.val();
-			freqMap.set(val, (freqMap.get(val) || 0) + 1);
-		});
-		return this.sort((a, b) => {
-			const aFreq = freqMap.get(a.color.val());
-			const bFreq = freqMap.get(b.color.val());
-			return aFreq - bFreq;
-		});
-	};
-
 	function setGhostPixelData() {
-		ghostPixelData = getGhostImageData().data.filter((d) => {
+		ghostData = Array.from(getGhostImageData().values());
+		const freeColorIds = FREE_COLORS.map((c) => c.id());
+		const availableColorIds = Colors.map((c) => new Color(c).id());
+		ghostPixelData = ghostData.filter((d) => {
 			return (
 				(usw.ghostBot.placeTransparentGhostPixels || d.color.a > 0) &&
-				(usw.ghostBot.placeFreeColors ||
-					!FREE_COLORS.map((c) => c.val()).includes(d.color.val())) &&
-				Colors.map((c) => new Color(c).val()).includes(d.color.val()) &&
-				!ignoredColors.has(d.color.val())
+				(usw.ghostBot.placeFreeColors || !freeColorIds.includes(d.color.id())) &&
+				availableColorIds.includes(d.color.id()) &&
+				!ignoredColors.has(d.color.id())
 			);
 		});
 	}
 
-	function getPixelsToPlace() {
+	function getGhostPixelData() {
 		if (!ghostPixelData) setGhostPixelData();
-		return ghostPixelData.orderGhostPixels().filter((d) => {
-			const placedPixel = placedPixels.get(`${d.gridCoord.x},${d.gridCoord.y}`);
-			return !placedPixel || new Color(placedPixel.color).val() !== d.color.val();
-		});
+		return ghostPixelData;
 	}
+
+	function getGhostData() {
+		if (!ghostData) setGhostPixelData();
+		return ghostData;
+	}
+
+	async function updatePlacedPixels() {
+		const ghostData = getGhostData();
+		const topLeft = ghostData[0].gridCoord;
+		const bottomRight = ghostData[ghostData.length - 1].gridCoord;
+
+		const tileCoords = getAllCoordsBetween(topLeft, bottomRight, SYNC_TILE_SIZE);
+
+		async function fetchTiles(tiles) {
+			return await fetch(`/GetPixelsCached`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					Tiles: tiles.map((t) => ({ ...t, timestamp: lastServerTimestamp })),
+				}),
+			});
+		}
+
+		for (let i = 0; i < tileCoords.length; i += 9) {
+			const r = await (await fetchTiles(tileCoords.slice(i, i + 9))).json();
+			if (r.ServerTimestamp) lastServerTimestamp = r.ServerTimestamp;
+			for (const [n, tile] of Object.entries(r.Tiles)) {
+				const coord = n.split("_").map(Number).filter(Number.isFinite);
+				if (tile.Type == "delta" && tile.Pixels.length)
+					for (const p of tile.Pixels) {
+						const [gridX, gridY, color, userId] = p;
+						placedPixelData.set(`${gridX},${gridY}`, {
+							gridCoord: { x: gridX, y: gridY },
+							color: new Color(color),
+						});
+					}
+				else if (tile.Type == "full") {
+					const canvasData = await webpToCanvasData(tile.ColorWebP, SYNC_TILE_SIZE, SYNC_TILE_SIZE);
+					canvasToImageData(canvasData, +coord[0], +coord[1] + SYNC_TILE_SIZE - 1, placedPixelData);
+				}
+			}
+		}
+	}
+	updatePlacedPixels = withErrorHandling(updatePlacedPixels);
+
+	Array.prototype.orderGhostPixels = function () {
+		const freqMap = new Map();
+		this.forEach((pixel) => {
+			const val = pixel.color.id();
+			freqMap.set(val, (freqMap.get(val) || 0) + 1);
+		});
+		return this.sort((a, b) => {
+			const aFreq = freqMap.get(a.color.id());
+			const bFreq = freqMap.get(b.color.id());
+			return aFreq - bFreq;
+		});
+	};
+
+	async function getPixelsToPlace() {
+		await updatePlacedPixels();
+
+		return getGhostPixelData()
+			.orderGhostPixels()
+			.filter((d) => {
+				const placedPixel = placedPixelData.get(`${d.gridCoord.x},${d.gridCoord.y}`);
+				return !placedPixel || placedPixel.color.id() !== d.color.id();
+			});
+	}
+	getPixelsToPlace = withErrorHandling(getPixelsToPlace);
 
 	async function sendPixels(pixels) {
 		const r = await fetch("https://geopixels.net/PlacePixel", {
@@ -252,9 +341,7 @@ function withErrorHandling(asyncFn) {
 		}
 		stopWhileLoop = false;
 		while (!stopWhileLoop) {
-			isPageVisible = true;
-			await synchronize("full");
-			const pixelsToPlace = getPixelsToPlace();
+			const pixelsToPlace = await getPixelsToPlace();
 			if (pixelsToPlace.length === 0) {
 				log(LOG_LEVELS.info, "All pixels are correctly placed.");
 				break;
@@ -263,13 +350,11 @@ function withErrorHandling(asyncFn) {
 			log(LOG_LEVELS.info, `Placing ${pixelsThisRequest.length}/${pixelsToPlace.length} pixels...`);
 
 			await sendPixels(
-				pixelsThisRequest.map((d) => {
-					return {
-						GridX: d.gridCoord.x,
-						GridY: d.gridCoord.y,
-						Color: d.color.websiteId(),
-					};
-				})
+				pixelsThisRequest.map((d) => ({
+					GridX: d.gridCoord.x,
+					GridY: d.gridCoord.y,
+					Color: d.color.id(),
+				}))
 			);
 
 			if (!tokenUser) {
@@ -281,12 +366,11 @@ function withErrorHandling(asyncFn) {
 				break;
 			}
 
-			/* isPageVisible = !document.hidden; */
 			await new Promise((resolve) => {
 				promiseResolve = resolve;
 				setTimeout(
 					resolve,
-					(maxEnergy > pixelsToPlace - maxEnergy ? pixelsToPlace - maxEnergy : maxEnergy - 2) *
+					(maxEnergy > pixelsToPlace.length ? pixelsToPlace.length : maxEnergy - 2) *
 						energyRate *
 						1000
 				);
@@ -299,8 +383,9 @@ function withErrorHandling(asyncFn) {
 		placeTransparentGhostPixels: false,
 		placeFreeColors: true,
 		ignoreColors: withErrorHandling((input, sep = ",") => {
+			if (input === undefined) input = [];
 			if (!Array.isArray(input)) input = input.split(sep);
-			ignoredColors = new Set(input.map((c) => new Color(c).val()));
+			ignoredColors = new Set(input.map((c) => new Color(c).id()));
 			log(LOG_LEVELS.info, "New ignored colors :", ignoredColors);
 		}),
 		start: () => startGhostBot(),
@@ -309,7 +394,12 @@ function withErrorHandling(asyncFn) {
 			promiseResolve?.();
 			log(LOG_LEVELS.info, "Ghost bot stopped");
 		},
-		reload: () => setGhostPixelData(),
+		reload: () => {
+			setGhostPixelData();
+			placedPixelData.clear();
+			lastServerTimestamp = 0;
+			updatePlacedPixels();
+		},
 	};
 
 	log(
