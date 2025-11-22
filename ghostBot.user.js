@@ -164,7 +164,7 @@ function withErrorHandling(asyncFn) {
 		try {
 			return await asyncFn(...args);
 		} catch (e) {
-			log(LOG_LEVELS.error, e.message);
+			log(LOG_LEVELS.error, e);
 		}
 	};
 }
@@ -175,19 +175,16 @@ const SYNC_TILE_SIZE = 1000;
 (function () {
 	const usw = unsafeWindow;
 	let ghostPixelData, ghostData;
-	let placedPixelData = new Map();
+	const placedPixelData = new Map();
 	let ignoredColors = new Set();
 	let lastServerTimestamp = 0;
 	const GOOGLE_CLIENT_ID = document.getElementById("g_id_onload")?.getAttribute("data-client_id");
 
-	async function tryRelog() {
+	const tryRelog = withErrorHandling(async function () {
 		tokenUser = "";
 
-		log(LOG_LEVELS.info, "attempting AutoLogin");
-		await usw.tryAutoLogin();
-
-		if (!tokenUser.length && GOOGLE_CLIENT_ID) {
-			log(LOG_LEVELS.info, "AutoLogin failed, attempting relog with google");
+		if (GOOGLE_CLIENT_ID) {
+			log(LOG_LEVELS.info, "attempting relog with google");
 			await new Promise((resolve) => {
 				google.accounts.id.initialize({
 					client_id: GOOGLE_CLIENT_ID,
@@ -213,8 +210,7 @@ const SYNC_TILE_SIZE = 1000;
 
 		log(LOG_LEVELS.info, `Relog ${tokenUser.length ? "successful" : "failed"}`);
 		return !!tokenUser.length;
-	}
-	tryRelog = withErrorHandling(tryRelog);
+	});
 
 	function getGhostImageData() {
 		if (!ghostImageOriginalData || !ghostImageTopLeft) return null;
@@ -249,7 +245,7 @@ const SYNC_TILE_SIZE = 1000;
 		return ghostData;
 	}
 
-	async function updatePlacedPixels() {
+	const updatePlacedPixels = withErrorHandling(async function () {
 		const ghostData = getGhostData();
 		const topLeft = ghostData[0].gridCoord;
 		const bottomRight = ghostData[ghostData.length - 1].gridCoord;
@@ -285,8 +281,7 @@ const SYNC_TILE_SIZE = 1000;
 				}
 			}
 		}
-	}
-	updatePlacedPixels = withErrorHandling(updatePlacedPixels);
+	});
 
 	Array.prototype.orderGhostPixels = function () {
 		const freqMap = new Map();
@@ -301,7 +296,7 @@ const SYNC_TILE_SIZE = 1000;
 		});
 	};
 
-	async function getPixelsToPlace() {
+	const getPixelsToPlace = withErrorHandling(async function () {
 		await updatePlacedPixels();
 
 		return getGhostPixelData()
@@ -310,10 +305,9 @@ const SYNC_TILE_SIZE = 1000;
 				const placedPixel = placedPixelData.get(`${d.gridCoord.x},${d.gridCoord.y}`);
 				return !placedPixel || placedPixel.color.id() !== d.color.id();
 			});
-	}
-	getPixelsToPlace = withErrorHandling(getPixelsToPlace);
+	});
 
-	async function sendPixels(pixels) {
+	const sendPixels = withErrorHandling(async function (pixels) {
 		const r = await fetch("https://geopixels.net/PlacePixel", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -328,13 +322,12 @@ const SYNC_TILE_SIZE = 1000;
 			log(LOG_LEVELS.warn, "Failed to place pixels. : " + (await r.text()));
 			if (r.status == 401 && (await tryRelog())) await sendPixels(pixels);
 		} else log(LOG_LEVELS.info, `Placed ${pixels.length} pixels!`);
-	}
-	sendPixels = withErrorHandling(sendPixels);
+	});
 
 	let stopWhileLoop = false;
 	let promiseResolve;
 
-	async function startGhostBot() {
+	const startGhostBot = withErrorHandling(async function () {
 		if (!ghostImage || !ghostImageOriginalData || !ghostImageTopLeft) {
 			log(LOG_LEVELS.warn, "Ghost image not loaded.");
 			return;
@@ -376,8 +369,7 @@ const SYNC_TILE_SIZE = 1000;
 				);
 			});
 		}
-	}
-	startGhostBot = withErrorHandling(startGhostBot);
+	});
 
 	usw.ghostBot = {
 		placeTransparentGhostPixels: false,

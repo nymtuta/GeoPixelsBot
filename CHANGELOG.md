@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - auto buy upgrades
 - farm mode
 
+## [Unreleased] (done)
+### Changed
+- Refactored async functions to use inline `withErrorHandling` wrapper instead of redifining them on the next line
+- Improved error logging to include full error object for better stack traces
+- Changed `placedPixelData` from `let` to `const`
+- Removed `tryAutoLogin` call from `tryRelog` function
+
 ## [0.4.0] - 2025-11-21
 ### Changed
 - Removed `valueOf()` and `val()`, renamed `websiteId()` to now only use more concise `id()` in the `Color` class
