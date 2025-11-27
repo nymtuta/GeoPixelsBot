@@ -6,7 +6,6 @@ A bot for automatic ghost placement on the website https://geopixels.net
 2. [click here](https://github.com/nymtuta/GeoPixelsBot/raw/refs/heads/main/ghostBot.user.js)
 
 ## Usage
-- leave your view in the middle of your ghost image (this is important or it will place pixels at the same place multiple times) (will be fixed later)
 - Commands: 
   - `ghostBot.start()` : start the bot
   - `ghostBot.stop()` : stop the bot

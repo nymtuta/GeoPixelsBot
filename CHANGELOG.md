@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - UI
 - multi account support
 - multiple pixel ordering strategies
+  - group by color (ordered by number of pixels)
+  - start with the outline
+  - paint by nearest neighbour and not line by line ignoring gaps
 - auto buy locked colors
 - auto buy upgrades
 - farm mode
